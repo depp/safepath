@@ -13,6 +13,9 @@ import (
 
 // A Rules is a set of restrictions for file names. Rules are bitflags, and
 // applying more bitflags applies stricter rules.
+//
+// For example, URLUnescaped | NotHidden rejects any paths which either require
+// escaping in URLs or which contain a path segment that starts with ".".
 type Rules uint8
 
 const (
