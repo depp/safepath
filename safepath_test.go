@@ -19,6 +19,38 @@ func testResult(t *testing.T, expect bool, r Rules, name, input string, err erro
 	}
 }
 
+func testSegment(t *testing.T, r Rules, input string, expectOk bool) {
+	t.Helper()
+	err := r.CheckPathSegment(input)
+	if expectOk {
+		if err != nil {
+			t.Errorf("rules: %#v; path: %q; err = %v, expect ok", r, input, err)
+		}
+	} else {
+		if err == nil {
+			t.Errorf("rules: %#v; path: %q; err = nil, expect error", r, input)
+		}
+	}
+}
+
+func TestASCIIOnly(t *testing.T) {
+	for i := 0; i < 256; i++ {
+		testSegment(t, ASCIIOnly, "text"+string(rune(i)), i != 0 && i != '/' && i < 128)
+	}
+	for i := 128; i < 256; i++ {
+		testSegment(t, ASCIIOnly, "text"+string([]byte{byte(i)}), false)
+	}
+}
+
+func TestValidUTF8(t *testing.T) {
+	for i := 0; i < 256; i++ {
+		testSegment(t, ValidUTF8, "text"+string(rune(i)), i != 0 && i != '/')
+	}
+	for i := 128; i < 256; i++ {
+		testSegment(t, ValidUTF8, "text"+string([]byte{byte(i)}), false)
+	}
+}
+
 func TestURLUnescaped(t *testing.T) {
 	passcases := []string{
 		"file",
@@ -166,8 +198,9 @@ func TestSafepath(t *testing.T) {
 		{0, ""},
 		{0, "."},
 		{0, ".."},
-		{0, "\u0080"},
 		{0, "\u0000"},
+		{Strict &^ ValidUTF8, "abc\x80"},
+		{Strict &^ ASCIIOnly, "\u0080"},
 		{Strict, "a"},
 		{Strict, "0123"},
 		{Strict, "A"},

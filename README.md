@@ -43,6 +43,10 @@ Error: invalid path "/": path is absolute
 Error: invalid path segment "NUL.TXT": uses reserved Windows filename "nul"
 ```
 
+## Unicode
+
+The notion of “safe” in Unicode is a bit difficult to define. This library does not have a comprehensive notion of safety for non-ASCII characters. Currently, there are only two rules that affect non-ASCII characters: `ValidUTF8` and `ASCIIOnly`.
+
 ## License
 
 SafePath is provided under the MIT license. See LICENSE.txt for details.

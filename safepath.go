@@ -27,6 +27,10 @@ const (
 )
 
 const (
+	// ASCIIOnly rejects non-ASCII characters.
+	ASCIIOnly Rules = 1 << iota
+	// ValidUTF8 rejects bytestrings that are not valid UTF-8 text.
+	ValidUTF8
 	// URLUnescaped requires that paths do not need hex escaping in URLs.
 	//
 	// This allows a fair number of punctuation marks, including !$&'()*+,;=,
@@ -37,7 +41,7 @@ const (
 	//
 	// The '@' character and '~' character have no special meaning in paths and
 	// are allowed.
-	URLUnescaped Rules = 1 << iota
+	URLUnescaped
 	// ShellSafe requires that paths are safe for use in a POSIX shell.
 	//
 	// This excludes characters with special meaning in the shell: |&;<>()$`\"'.
@@ -72,53 +76,64 @@ const (
 	// it allows only paths that follow all of the rulesets defined in this
 	// library, and any future rulesets added to the libary will likely be added
 	// to Strict.
-	Strict = URLUnescaped | ShellSafe | ArgumentSafe | WindowsSafe | NotHidden
+	Strict = ASCIIOnly | ValidUTF8 | URLUnescaped | ShellSafe | ArgumentSafe | WindowsSafe | NotHidden
 )
 
 // GoString implements the GoStringer interface.
 func (r Rules) GoString() string {
 	var s []string
+	if r&ASCIIOnly != 0 {
+		s = append(s, "ASCIIOnly")
+	}
+	if r&ValidUTF8 != 0 {
+		s = append(s, "ValidUTF8")
+	}
 	if r&URLUnescaped != 0 {
-		r &^= URLUnescaped
 		s = append(s, "URLUnescaped")
 	}
 	if r&ShellSafe != 0 {
-		r &^= ShellSafe
+		s = append(s, "ShellSafe")
+	}
+	if r&ArgumentSafe != 0 {
 		s = append(s, "ShellSafe")
 	}
 	if r&WindowsSafe != 0 {
-		r &^= WindowsSafe
 		s = append(s, "WindowsSafe")
 	}
 	if r&NotHidden != 0 {
-		r &^= NotHidden
 		s = append(s, "NotHidden")
 	}
-	if r == 0 {
+	rem := r &^ (ASCIIOnly | ValidUTF8 | URLUnescaped | ShellSafe | ArgumentSafe | WindowsSafe | NotHidden)
+	if rem == 0 {
 		if len(s) == 0 {
-			return "0"
+			return "Any"
 		}
 		return strings.Join(s, "|")
 	}
-	s = append(s, fmt.Sprintf("0x%02x", r))
+	s = append(s, fmt.Sprintf("0x%02x", rem))
 	return strings.Join(s, "|")
 }
 
-var flags [128]Rules
+var flags [256]Rules // Indexed by byte.
 var windowsReserved map[string]bool
 
 func init() {
 	// Control characters are permitted by the 'always' ruleset.
 	for c := 1; c < 32; c++ {
-		flags[c] = always
+		flags[c] = always | ASCIIOnly | ValidUTF8
 	}
-	flags[127] = always
+	flags[127] = always | ASCIIOnly | ValidUTF8
 
 	// Allow ASCII characters other than control characters and '/'.
 	for c := 32; c <= 126; c++ {
 		flags[c] = Strict | always
 	}
 	flags['/'] = 0
+
+	// Allow any UTF-8 character, except for ASCIIOnly rules.
+	for c := 128; c < 256; c++ {
+		flags[c] = (Strict | always) &^ ASCIIOnly
+	}
 
 	// RFC 3986 section 3.3
 	// https://tools.ietf.org/html/rfc3986#section-3.3
@@ -165,7 +180,8 @@ const (
 	errFirst
 	errLast
 	errAny
-	errUnicode
+	errInvalidUTF8
+	errNonASCII
 	errWReserved
 
 	// Path errors.
@@ -181,6 +197,7 @@ type Error struct {
 	path   string
 	name   string
 	err    int
+	byte   byte
 	char   rune
 	base   string
 }
@@ -194,9 +211,19 @@ func (e *Error) Error() string {
 	case errLast:
 		msg = fmt.Sprintf("ends with disallowed character %q", e.char)
 	case errAny:
-		msg = fmt.Sprintf("contains disallowed character %q", e.char)
-	case errUnicode:
-		msg = fmt.Sprintf("contains non-ASCII character %q U+%04X", e.char, e.char)
+		if e.byte != 0 {
+			msg = fmt.Sprintf("contains disallowed byte 0x%02x", e.byte)
+		} else {
+			msg = fmt.Sprintf("contains disallowed character %q", e.char)
+		}
+	case errInvalidUTF8:
+		msg = "not valid UTF-8 text"
+	case errNonASCII:
+		if e.byte != 0 {
+			msg = fmt.Sprintf("contains non-ASCII byte 0x%02x", e.byte)
+		} else {
+			msg = fmt.Sprintf("contains non-ASCII character %q U+%04X", e.char, e.char)
+		}
 	case errWReserved:
 		msg = fmt.Sprintf("uses reserved Windows filename %q", e.base)
 	case errEmpty:
@@ -239,6 +266,30 @@ func (r Rules) CheckPathSegment(name string) error {
 	if name == "" || name == "." || name == ".." {
 		return &Error{name: name, err: errBad}
 	}
+	if r&(ASCIIOnly|ValidUTF8) == ValidUTF8 {
+		rest := name
+		for len(rest) != 0 {
+			c, n := utf8.DecodeRuneInString(rest)
+			if c == utf8.RuneError && n == 1 {
+				return &Error{name: name, err: errInvalidUTF8}
+			}
+			rest = rest[n:]
+		}
+	}
+	for i, c := range []byte(name) {
+		f := flags[c]
+		if f&r != r {
+			ecode := errAny
+			if r&ASCIIOnly != 0 && r&ASCIIOnly == 0 {
+				ecode = errNonASCII
+			}
+			uc, n := utf8.DecodeRuneInString(name[i:])
+			if uc == utf8.RuneError && n == 1 {
+				return &Error{name: name, err: ecode, byte: c}
+			}
+			return &Error{name: name, err: ecode, char: uc}
+		}
+	}
 	first, _ := utf8.DecodeRuneInString(name)
 	last, _ := utf8.DecodeLastRuneInString(name)
 	if r&ShellSafe != 0 && first == '~' {
@@ -268,16 +319,6 @@ func (r Rules) CheckPathSegment(name string) error {
 	if r&NotHidden != 0 {
 		if first == '.' {
 			return &Error{name: name, err: errFirst, char: first}
-		}
-	}
-	r &^= NotHidden
-	for _, c := range name {
-		if c >= 128 {
-			return &Error{name: name, err: errUnicode, char: c}
-		}
-		f := flags[c]
-		if f&r != r {
-			return &Error{name: name, err: errAny, char: c}
 		}
 	}
 	return nil
