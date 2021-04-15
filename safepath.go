@@ -256,6 +256,10 @@ func (r Rules) CheckPathSegment(name string) error {
 // This requires that the path be normalized first. Backslashes are treated as
 // ordinary characters (not path separators), and double slashes are considered
 // errors.
+//
+// Absolute paths are rejected. Occurrences of "." or ".." are rejected. The
+// empty path is rejected. Paths which end with "/" are rejected. Individual
+// path segments are validated according to the rules, see CheckPathSegment.
 func (r Rules) CheckPath(name string) error {
 	if len(name) == 0 {
 		return &Error{isPath: true, path: name, err: errEmpty}
