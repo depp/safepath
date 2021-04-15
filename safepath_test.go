@@ -29,6 +29,7 @@ func TestSafepath(t *testing.T) {
 		{0, "."},
 		{0, ".."},
 		{0, "\u0080"},
+		{0, "\u0000"},
 		{Strict, "a"},
 		{Strict, "0123"},
 		{Strict, "A"},

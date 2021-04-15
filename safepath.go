@@ -192,8 +192,8 @@ func (e *pathSegmentError) Error() string {
 // CheckPathSegment returns an error if the given name is not a safe path
 // segment according to the chosen rules.
 //
-// The empty name, ".", and ".." are always unsafe, and '/' and is always an
-// unsafe character
+// The empty name, ".", and ".." are always unsafe. The '/' character and the
+// null byte are always unsafe.
 func (r Rules) CheckPathSegment(name string) error {
 	r = (r & Strict) | laxRules
 	if name == "" || name == "." || name == ".." {
