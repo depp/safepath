@@ -136,7 +136,8 @@ const (
 	errDoubleSlash
 )
 
-type pathSegmentError struct {
+// An Error indicates that a path is considered unsafe.
+type Error struct {
 	isPath bool
 	path   string
 	name   string
@@ -145,7 +146,7 @@ type pathSegmentError struct {
 	base   string
 }
 
-func (e *pathSegmentError) Error() string {
+func (e *Error) Error() string {
 	var msg string
 	switch e.err {
 	case errBad:
@@ -168,7 +169,7 @@ func (e *pathSegmentError) Error() string {
 	case errDoubleSlash:
 		msg = "path has double slash"
 	default:
-		panic("invalid pathSegmentError")
+		panic("invalid safepath.Error")
 	}
 	if e.err <= errWReserved {
 		prefix := fmt.Sprintf("invalid path segment %q", e.name)
@@ -197,18 +198,18 @@ func (e *pathSegmentError) Error() string {
 func (r Rules) CheckPathSegment(name string) error {
 	r = (r & Strict) | laxRules
 	if name == "" || name == "." || name == ".." {
-		return &pathSegmentError{name: name, err: errBad}
+		return &Error{name: name, err: errBad}
 	}
 	first, _ := utf8.DecodeRuneInString(name)
 	last, _ := utf8.DecodeLastRuneInString(name)
 	if r&ShellSafe != 0 {
 		if first == '-' || first == '~' {
-			return &pathSegmentError{name: name, err: errFirst, char: first}
+			return &Error{name: name, err: errFirst, char: first}
 		}
 	}
 	if r&WindowsSafe != 0 {
 		if last == '.' || last == ' ' {
-			return &pathSegmentError{name: name, err: errLast, char: last}
+			return &Error{name: name, err: errLast, char: last}
 		}
 		i := strings.IndexByte(name, '.')
 		if i == -1 || strings.IndexByte(name[i+1:], '.') == -1 {
@@ -219,24 +220,24 @@ func (r Rules) CheckPathSegment(name string) error {
 			if i == 3 || i == 4 {
 				base = strings.ToLower(base)
 				if windowsReserved[base] {
-					return &pathSegmentError{name: name, err: errWReserved, base: base}
+					return &Error{name: name, err: errWReserved, base: base}
 				}
 			}
 		}
 	}
 	if r&NotHidden != 0 {
 		if first == '.' {
-			return &pathSegmentError{name: name, err: errFirst, char: first}
+			return &Error{name: name, err: errFirst, char: first}
 		}
 	}
 	r &^= NotHidden
 	for _, c := range name {
 		if c >= 128 {
-			return &pathSegmentError{name: name, err: errUnicode, char: c}
+			return &Error{name: name, err: errUnicode, char: c}
 		}
 		f := flags[c]
 		if f&r != r {
-			return &pathSegmentError{name: name, err: errAny, char: c}
+			return &Error{name: name, err: errAny, char: c}
 		}
 	}
 	return nil
@@ -244,18 +245,22 @@ func (r Rules) CheckPathSegment(name string) error {
 
 // CheckPath returns an error if the given path is not a safe path. A safe path
 // consists of a non-empty list of safe segments separated by slashes.
+//
+// This requires that the path be normalized first. Backslashes are treated as
+// ordinary characters (not path separators), and double slashes are considered
+// errors.
 func (r Rules) CheckPath(name string) error {
 	if len(name) == 0 {
-		return &pathSegmentError{isPath: true, path: name, err: errEmpty}
+		return &Error{isPath: true, path: name, err: errEmpty}
 	}
 	if name[0] == '/' {
-		return &pathSegmentError{isPath: true, path: name, err: errAbsolute}
+		return &Error{isPath: true, path: name, err: errAbsolute}
 	}
 	for len(name) != 0 {
 		var part string
 		switch i := strings.IndexByte(name, '/'); {
 		case i == 0:
-			return &pathSegmentError{isPath: true, path: name, err: errDoubleSlash}
+			return &Error{isPath: true, path: name, err: errDoubleSlash}
 		case i == -1:
 			part = name
 			name = ""
@@ -263,11 +268,11 @@ func (r Rules) CheckPath(name string) error {
 			part = name[:i]
 			name = name[i+1:]
 			if len(name) == 0 {
-				return &pathSegmentError{isPath: true, path: name, err: errTrailingSlash}
+				return &Error{isPath: true, path: name, err: errTrailingSlash}
 			}
 		}
 		if err := r.CheckPathSegment(part); err != nil {
-			e := err.(*pathSegmentError)
+			e := err.(*Error)
 			e.isPath = true
 			e.path = name
 			return e
