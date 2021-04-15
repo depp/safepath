@@ -90,7 +90,7 @@ func init() {
 	// sub-delims    = "!" / "$" / "&" / "'" / "(" / ")"
 	//               / "*" / "+" / "," / ";" / "="
 	// Colon is disallowed in the first segment of a relative path, so we
-	// disallow it everywher.
+	// disallow it everywhere.
 	for _, c := range "-._~!$&'()*+,;=" {
 		flags[c] |= URLUnescaped
 	}
