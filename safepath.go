@@ -53,6 +53,11 @@ const (
 	// laxRules are rules that always apply.
 	laxRules
 	// Strict is the strictest set of rules.
+	//
+	// This rule may get more strict in new versions of the library. Currently,
+	// it allows only paths that follow all of the rulesets defined in this
+	// library, and any future rulesets added to the libary will likely be added
+	// to Strict.
 	Strict = URLUnescaped | ShellSafe | ArgumentSafe | WindowsSafe | NotHidden
 )
 
