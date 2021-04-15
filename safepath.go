@@ -16,6 +16,11 @@ import (
 type Rules uint8
 
 const (
+	// Any allows any path which can be used on lax systems like Linux.
+	//
+	// This only rejects path segments like ".." and ".", and only disallows the
+	// '/' character and null byte. Any other bytestring is considered valid.
+	Any Rules = 0
 	// URLUnescaped requires that paths do not need hex escaping in URLs.
 	//
 	// This allows a fair number of punctuation marks, including !$&'()*+,;=,
