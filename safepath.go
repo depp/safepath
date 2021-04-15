@@ -17,8 +17,19 @@ type Rules uint8
 
 const (
 	// URLUnescaped requires that paths do not need hex escaping in URLs.
+	//
+	// This allows a fair number of punctuation marks, including !$&'()*+,;=,
+	// which are referred to as "sub-delims" in RFC 3986. The colon character,
+	// ":", does not need to be escaped in the path of absolute URIs, but is not
+	// safe to use as the first segment of a relative URI, so it is not allowed
+	// anywhere.
+	//
+	// The '@' character and '~' character have no special meaning in paths and
+	//are allowed.
 	URLUnescaped Rules = 1 << iota
 	// ShellSafe requires that paths are safe for use in a POSIX shell.
+	//
+	// This excludes characters with special meaning in the shell: |&;<>()$`\"'.
 	ShellSafe
 	// WindowsSafe requires that paths are safe for Windows filesystems.
 	//
@@ -98,7 +109,7 @@ func init() {
 	//               / "*" / "+" / "," / ";" / "="
 	// Colon is disallowed in the first segment of a relative path, so we
 	// disallow it everywhere.
-	for _, c := range "-._~!$&'()*+,;=" {
+	for _, c := range "@-._~!$&'()*+,;=" {
 		flags[c] |= URLUnescaped
 	}
 

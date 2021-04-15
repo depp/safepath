@@ -19,6 +19,73 @@ func testResult(t *testing.T, expect bool, r Rules, name, input string, err erro
 	}
 }
 
+func TestURLUnescaped(t *testing.T) {
+	passcases := []string{
+		"file",
+		"file.txt",
+		"file_underscore",
+		"file-hyphen",
+		"0123456789",
+		// Don't apply Windows rules.
+		"nul",
+		"nul.txt",
+		// "@" is actually ok in the path.
+		"@",
+		// "~" does not actually have any special meaning.
+		"~user",
+		// sub-delims are ok.
+		"!",
+		"$",
+		"&",
+		"'",
+		"(",
+		")",
+		"*",
+		"+",
+		",",
+		";",
+		"=",
+	}
+	for _, c := range passcases {
+		if err := URLUnescaped.CheckPathSegment(c); err != nil {
+			t.Errorf("path %q: %v, expect ok", c, err)
+		}
+	}
+	failcases := []string{
+		"/",
+		// Looks like a scheme.
+		"colon:",
+		"mailto:user",
+		// Percent encoding.
+		"%",
+		"%20",
+		"Untitled%20Document",
+		// Various delimiters.
+		"/",
+		"\"",
+		"<",
+		">",
+		"?",
+		"[",
+		"]",
+		"\\",
+		"^",
+		"`",
+		"{",
+		"}",
+		"|",
+		// Control characters.
+		"\x00",
+		"\x1f",
+		"\n",
+	}
+	for _, c := range failcases {
+		if err := URLUnescaped.CheckPathSegment(c); err == nil {
+			t.Errorf("path %q: ok, expect error", c)
+		}
+	}
+}
+
 func TestWindowsReserved(t *testing.T) {
 	reserved := []string{
 		"con",
