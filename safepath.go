@@ -24,6 +24,9 @@ const (
 	// This only rejects path segments like ".." and ".", and only disallows the
 	// '/' character and null byte. Any other bytestring is considered valid.
 	Any Rules = 0
+)
+
+const (
 	// URLUnescaped requires that paths do not need hex escaping in URLs.
 	//
 	// This allows a fair number of punctuation marks, including !$&'()*+,;=,
@@ -58,8 +61,11 @@ const (
 	WindowsSafe
 	// NotHidden requires that paths do not start with a period.
 	NotHidden
-	// laxRules are rules that always apply.
-	laxRules
+	// always are rules that always apply. Used to filter out / and null byte.
+	always
+)
+
+const (
 	// Strict is the strictest set of rules.
 	//
 	// This rule may get more strict in new versions of the library. Currently,
@@ -102,23 +108,15 @@ var flags [128]Rules
 var windowsReserved map[string]bool
 
 func init() {
-	const strict = Strict | laxRules
-	for c := 1; c <= 127; c++ {
-		flags[c] = laxRules
+	// Control characters are permitted by the 'always' ruleset.
+	for c := 1; c < 32; c++ {
+		flags[c] = always
 	}
-	// Alphanumerics are always safe.
-	for c := '0'; c <= '9'; c++ {
-		flags[c] = strict
-	}
-	for c := 'a'; c <= 'z'; c++ {
-		flags[c] = strict
-	}
-	for c := 'A'; c <= 'Z'; c++ {
-		flags[c] = strict
-	}
-	// Shell and Windows use blacklist, URLUnescaped uses whitelist.
-	for c := 33; c <= 126; c++ {
-		flags[c] |= ShellSafe | ArgumentSafe | WindowsSafe
+	flags[127] = always
+
+	// Allow ASCII characters other than control characters and '/'.
+	for c := 32; c <= 126; c++ {
+		flags[c] = Strict | always
 	}
 	flags['/'] = 0
 
@@ -130,24 +128,26 @@ func init() {
 	//               / "*" / "+" / "," / ";" / "="
 	// Colon is disallowed in the first segment of a relative path, so we
 	// disallow it everywhere.
-	for _, c := range "@-._~!$&'()*+,;=" {
-		flags[c] |= URLUnescaped
+	for _, c := range " \"#%/:<>?[\\]^`{|}" {
+		flags[c] &^= URLUnescaped
 	}
 
 	// IEEE Std1003.1-2017 section C.2 Shell Command Language
 	// https://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xcu_chap02.html
 	// Needs quoting: "|" / "&" / ";" / "<" / ">" / "(" / ")" / "$" / "`" / "\" / <"> / "'"
-	for _, c := range "|&;<>()$`\\\"'" {
+	// Also space.
+	for _, c := range " |&;<>()$`\\\"'" {
 		flags[c] &^= ShellSafe
 	}
 
 	// MSDN: Naming Files, Paths, and Namespaces
 	// https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file
 	// Needs quoting: "<" / ">" / ":" / """ / "/" / "\" / "|" / "?" / "*"
-	flags[' '] |= WindowsSafe
 	for _, c := range "<>:\"/\\|?*" {
 		flags[c] &^= WindowsSafe
 	}
+
+	// Initialize list of reserved windows filenames.
 	windowsReserved = make(map[string]bool, 4+9*2)
 	for _, name := range []string{"con", "prn", "aux", "nul"} {
 		windowsReserved[name] = true
@@ -235,7 +235,7 @@ func (e *Error) Error() string {
 // The empty name, ".", and ".." are always unsafe. The '/' character and the
 // null byte are always unsafe.
 func (r Rules) CheckPathSegment(name string) error {
-	r = (r & Strict) | laxRules
+	r = (r & Strict) | always
 	if name == "" || name == "." || name == ".." {
 		return &Error{name: name, err: errBad}
 	}

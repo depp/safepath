@@ -157,7 +157,7 @@ func TestWindowsReserved(t *testing.T) {
 }
 
 func TestSafepath(t *testing.T) {
-	allRules := []Rules{URLUnescaped, ShellSafe, ArgumentSafe, WindowsSafe, NotHidden, laxRules}
+	allRules := []Rules{URLUnescaped, ShellSafe, ArgumentSafe, WindowsSafe, NotHidden, always}
 	type testcase struct {
 		rules Rules
 		name  string
@@ -181,8 +181,8 @@ func TestSafepath(t *testing.T) {
 		{Strict &^ ShellSafe, "$dollar$"},
 		{Strict &^ NotHidden, ".foo"},
 		{Strict &^ WindowsSafe, "a."},
-		{WindowsSafe | NotHidden, "a b"},
-		{NotHidden, "ab "},
+		{ArgumentSafe | WindowsSafe | NotHidden, "a b"},
+		{ArgumentSafe | NotHidden, "ab "},
 		{Strict &^ WindowsSafe, "ab."},
 		{Strict &^ ArgumentSafe, "-"},
 		{Strict &^ ArgumentSafe, "--abc"},
@@ -192,7 +192,7 @@ func TestSafepath(t *testing.T) {
 		t.Run(strconv.Quote(c.name), func(t *testing.T) {
 			cr := c.rules
 			if cr != 0 {
-				cr |= laxRules
+				cr |= always
 			}
 			for _, r := range allRules {
 				expect := r&cr == r
@@ -213,7 +213,7 @@ func TestSafepath(t *testing.T) {
 	for _, c := range pcases {
 		c := c
 		t.Run(strconv.Quote(c), func(t *testing.T) {
-			if err := laxRules.CheckPath(c); err == nil {
+			if err := always.CheckPath(c); err == nil {
 				t.Errorf("CheckPath(%q) = nil, expect error", c)
 			}
 		})
