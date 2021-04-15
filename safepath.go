@@ -25,12 +25,20 @@ const (
 	// anywhere.
 	//
 	// The '@' character and '~' character have no special meaning in paths and
-	//are allowed.
+	// are allowed.
 	URLUnescaped Rules = 1 << iota
 	// ShellSafe requires that paths are safe for use in a POSIX shell.
 	//
 	// This excludes characters with special meaning in the shell: |&;<>()$`\"'.
+	// Segments which begin with "~" are also rejected. You may want to combine
+	// this flag with ArgumentSafe.
 	ShellSafe
+	// ArgumentSafe requires that paths are safe to pass as arguments to
+	// command-line programs.
+	//
+	// This requires that path segments do not begin with '-', since that may be
+	// interpreted as a command-line option.
+	ArgumentSafe
 	// WindowsSafe requires that paths are safe for Windows filesystems.
 	//
 	// On Windows, control characters in the range 1-31 are not allowed, the
@@ -45,7 +53,7 @@ const (
 	// laxRules are rules that always apply.
 	laxRules
 	// Strict is the strictest set of rules.
-	Strict = URLUnescaped | ShellSafe | WindowsSafe | NotHidden
+	Strict = URLUnescaped | ShellSafe | ArgumentSafe | WindowsSafe | NotHidden
 )
 
 // GoString implements the GoStringer interface.
@@ -97,7 +105,7 @@ func init() {
 	}
 	// Shell and Windows use blacklist, URLUnescaped uses whitelist.
 	for c := 33; c <= 126; c++ {
-		flags[c] |= ShellSafe | WindowsSafe
+		flags[c] |= ShellSafe | ArgumentSafe | WindowsSafe
 	}
 	flags['/'] = 0
 
@@ -220,10 +228,11 @@ func (r Rules) CheckPathSegment(name string) error {
 	}
 	first, _ := utf8.DecodeRuneInString(name)
 	last, _ := utf8.DecodeLastRuneInString(name)
-	if r&ShellSafe != 0 {
-		if first == '-' || first == '~' {
-			return &Error{name: name, err: errFirst, char: first}
-		}
+	if r&ShellSafe != 0 && first == '~' {
+		return &Error{name: name, err: errFirst, char: first}
+	}
+	if r&ArgumentSafe != 0 && first == '-' {
+		return &Error{name: name, err: errFirst, char: first}
 	}
 	if r&WindowsSafe != 0 {
 		if last == '.' || last == ' ' {

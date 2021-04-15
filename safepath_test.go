@@ -86,6 +86,47 @@ func TestURLUnescaped(t *testing.T) {
 	}
 }
 
+func TestShellSafe(t *testing.T) {
+	var invalid [128]bool
+	for _, c := range " /|&;<>()$`\\\"'" {
+		invalid[c] = true
+	}
+	for i := 0; i < 32; i++ {
+		invalid[i] = true
+	}
+	invalid[127] = true
+	for i, cinval := range invalid {
+		s := "file" + string(rune(i))
+		if cinval {
+			if ShellSafe.CheckPathSegment(s) == nil {
+				t.Errorf("path %q: ok, expect error", s)
+			}
+		} else {
+			if err := ShellSafe.CheckPathSegment(s); err != nil {
+				t.Errorf("path %q: %v, expect ok", s, err)
+			}
+		}
+	}
+	failcases := []string{
+		"~",
+		"~user",
+	}
+	for _, c := range failcases {
+		if ShellSafe.CheckPathSegment(c) == nil {
+			t.Errorf("path %q: ok, expect error", c)
+		}
+	}
+	passcases := []string{
+		"-",
+		"-flag",
+	}
+	for _, c := range passcases {
+		if err := ShellSafe.CheckPathSegment(c); err != nil {
+			t.Errorf("path %q: %v, expect ok", c, err)
+		}
+	}
+}
+
 func TestWindowsReserved(t *testing.T) {
 	reserved := []string{
 		"con",
@@ -116,7 +157,7 @@ func TestWindowsReserved(t *testing.T) {
 }
 
 func TestSafepath(t *testing.T) {
-	allRules := []Rules{URLUnescaped, ShellSafe, WindowsSafe, NotHidden, laxRules}
+	allRules := []Rules{URLUnescaped, ShellSafe, ArgumentSafe, WindowsSafe, NotHidden, laxRules}
 	type testcase struct {
 		rules Rules
 		name  string
@@ -143,8 +184,8 @@ func TestSafepath(t *testing.T) {
 		{WindowsSafe | NotHidden, "a b"},
 		{NotHidden, "ab "},
 		{Strict &^ WindowsSafe, "ab."},
-		{Strict &^ ShellSafe, "-"},
-		{Strict &^ ShellSafe, "--abc"},
+		{Strict &^ ArgumentSafe, "-"},
+		{Strict &^ ArgumentSafe, "--abc"},
 	}
 	for _, c := range cases {
 		c := c
