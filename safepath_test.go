@@ -2,6 +2,7 @@ package safepath
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -14,6 +15,35 @@ func testResult(t *testing.T, expect bool, r Rules, name, input string, err erro
 	} else {
 		if err != nil {
 			t.Errorf("%#v.%s(%q) = %v, expect ok", r, name, input, err)
+		}
+	}
+}
+
+func TestWindowsReserved(t *testing.T) {
+	reserved := []string{
+		"con",
+		"prn",
+		"aux",
+		"nul",
+		"com1",
+		"com2",
+		"com8",
+		"com9",
+		"lpt1",
+		"lpt2",
+		"lpt8",
+		"lpt9",
+	}
+	for _, c := range reserved {
+		failcases := []string{
+			c,
+			strings.ToUpper(c),
+			c + ".txt",
+		}
+		for _, s := range failcases {
+			if WindowsSafe.CheckPathSegment(s) == nil {
+				t.Errorf("path %q safe, expect error", s)
+			}
 		}
 	}
 }
@@ -38,6 +68,8 @@ func TestSafepath(t *testing.T) {
 		{Strict, "nul.txt.foo"},
 		{Strict &^ ShellSafe, "~username"},
 		{Strict &^ WindowsSafe, "nul.txt"},
+		{Strict &^ WindowsSafe, "LPT1"},
+		{Strict &^ WindowsSafe, "lpt8.dat"},
 		{Strict &^ ShellSafe, "$dollar$"},
 		{Strict &^ NotHidden, ".foo"},
 		{Strict &^ WindowsSafe, "a."},

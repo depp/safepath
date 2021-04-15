@@ -21,6 +21,13 @@ const (
 	// ShellSafe requires that paths are safe for use in a POSIX shell.
 	ShellSafe
 	// WindowsSafe requires that paths are safe for Windows filesystems.
+	//
+	// On Windows, control characters in the range 1-31 are not allowed, the
+	// reserved characters <>:"/\\|?* are not allowed, and a path segment may
+	// not match one of the reserved names: con.*, prn.*, aux.*, etc. Segments
+	// may not end with a space.
+	//
+	// See https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file.
 	WindowsSafe
 	// NotHidden requires that paths do not start with a period.
 	NotHidden
@@ -217,7 +224,7 @@ func (r Rules) CheckPathSegment(name string) error {
 			if i != -1 {
 				base = name[:i]
 			}
-			if i == 3 || i == 4 {
+			if len(base) == 3 || len(base) == 4 {
 				base = strings.ToLower(base)
 				if windowsReserved[base] {
 					return &Error{name: name, err: errWReserved, base: base}
