@@ -341,18 +341,19 @@ func (r Rules) CheckPath(name string) error {
 	if name[0] == '/' {
 		return &Error{isPath: true, path: name, err: errAbsolute}
 	}
-	for len(name) != 0 {
+	rest := name
+	for len(rest) != 0 {
 		var part string
-		switch i := strings.IndexByte(name, '/'); {
+		switch i := strings.IndexByte(rest, '/'); {
 		case i == 0:
 			return &Error{isPath: true, path: name, err: errDoubleSlash}
 		case i == -1:
-			part = name
-			name = ""
+			part = rest
+			rest = ""
 		default:
-			part = name[:i]
-			name = name[i+1:]
-			if len(name) == 0 {
+			part = rest[:i]
+			rest = rest[i+1:]
+			if len(rest) == 0 {
 				return &Error{isPath: true, path: name, err: errTrailingSlash}
 			}
 		}
